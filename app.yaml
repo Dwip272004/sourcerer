@@ -2,5 +2,5 @@ command: ["streamlit", "run", "app.py"]
 env:
   - name: DATABRICKS_WAREHOUSE_ID
     valueFrom: sql-warehouse      # app resource key (SQL warehouse, "Can use")
-  - name: SOURCING_JOB_ID
-    valueFrom: sourcing-job       # app resource key (Job, "Can manage run")
+  - name: SOURCING_JOB_NAME
+    value: "Chiparama Sourcing - JD to shortlist"

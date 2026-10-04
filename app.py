@@ -9,7 +9,6 @@ from databricks.sdk.core import Config
 st.set_page_config(page_title="Chiparama Sourcing", layout="wide")
 cfg = Config()
 WH = os.environ["DATABRICKS_WAREHOUSE_ID"]
-JOB_ID = int(os.environ["SOURCING_JOB_ID"])
 S = "workspace.sourcing"
 STATUSES = ["New", "InMail sent", "Replied", "Call scheduled", "Screened - interested",
             "Not interested", "Submitted to client", "Rejected", "Unreachable"]
@@ -32,6 +31,18 @@ def run(query, params=None):
 @st.cache_resource
 def ws():
     return WorkspaceClient()
+
+@st.cache_resource
+def job_id():
+    """Job id from SOURCING_JOB_ID if set, otherwise looked up by name."""
+    if os.environ.get("SOURCING_JOB_ID"):
+        return int(os.environ["SOURCING_JOB_ID"])
+    name = os.environ.get("SOURCING_JOB_NAME", "Chiparama Sourcing - JD to shortlist")
+    found = list(ws().jobs.list(name=name))
+    if not found:
+        st.error(f"Job '{name}' not visible to the app. Run notebook 07 to give the app 'Can manage run' on it.")
+        st.stop()
+    return found[0].job_id
 
 st.sidebar.title("Chiparama Sourcing")
 st.sidebar.caption(f"Signed in as {USER}")
@@ -59,7 +70,7 @@ if page == "New JD":
             run(f"""INSERT INTO {S}.jds VALUES (:id, :t, :txt, :kw, :loc, current_timestamp())""",
                 {"id": jd_id, "t": title, "txt": jd_text, "kw": keywords, "loc": location})
             try:
-                r = ws().jobs.run_now(job_id=JOB_ID, job_parameters={
+                r = ws().jobs.run_now(job_id=job_id(), job_parameters={
                     "jd_id": jd_id, "jd_title": title, "jd_path": "", "keywords": keywords,
                     "location": location, "max_candidates": str(max_c), "mode": "api", "rescreen": "false"})
                 st.success(f"Sourcing started for **{jd_id}**. The call list is usually ready in 5-15 minutes "
@@ -73,7 +84,7 @@ if page == "New JD":
 elif page == "Sourcing runs":
     st.header("Sourcing runs")
     rows = []
-    for r in ws().jobs.list_runs(job_id=JOB_ID, limit=20):
+    for r in ws().jobs.list_runs(job_id=job_id(), limit=20):
         p = {x.name: x.value for x in (r.job_parameters or [])}
         rows.append({"JD": p.get("jd_id"), "Started": pd.to_datetime(r.start_time, unit="ms") + pd.Timedelta(hours=5, minutes=30),
                      "State": (r.state.result_state or r.state.life_cycle_state).value if r.state else "",
